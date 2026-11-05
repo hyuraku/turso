@@ -493,6 +493,9 @@ PRAGMA fullfsync = off;  -- use fsync again
 
 When enabled, Turso rejects any `UPDATE` or `DELETE` that does not include a `WHERE` clause, guarding against accidental full-table modifications. `i_am_a_dummy` is an alias that enables the same behavior.
 
+Changing this setting also applies to statements prepared before the change when they
+are next executed.
+
 ```sql
 PRAGMA require_where = 1;
 DELETE FROM users;            -- rejected: no WHERE clause
@@ -508,6 +511,9 @@ row with the number of rows it changed, in a column named `rows inserted`, `rows
 or `rows deleted`. Trigger bodies, foreign key actions and other nested statements never
 emit count rows, and a statement with a `RETURNING` clause does not either, since it
 already returns rows.
+
+Changing this setting also applies to statements prepared before the change when they
+are next executed.
 
 ```sql
 PRAGMA count_changes;          -- count_changes: 0 (default)

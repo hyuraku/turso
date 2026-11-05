@@ -3727,6 +3727,7 @@ impl Connection {
 
     pub fn set_dml_require_where(&self, value: bool) {
         self.dml_require_where.store(value, Ordering::SeqCst);
+        self.bump_prepare_context_generation();
     }
 
     pub fn get_count_changes(&self) -> bool {
@@ -3735,6 +3736,7 @@ impl Connection {
 
     pub fn set_count_changes(&self, value: bool) {
         self.count_changes.store(value, Ordering::SeqCst);
+        self.bump_prepare_context_generation();
     }
 
     pub fn get_dqs_dml(&self) -> bool {
@@ -5697,6 +5699,42 @@ mod tests {
 
         let err = stmt.run_ignore_rows().unwrap_err().to_string();
         assert!(err.contains("CHECK constraint failed"), "got: {err}");
+    }
+
+    #[test]
+    fn test_prepared_insert_returns_changes_after_count_changes_on() {
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("main.db");
+        let conn = open_connection(&db_path);
+
+        conn.execute("CREATE TABLE t1(a INTEGER)").unwrap();
+        let mut stmt = conn.prepare("INSERT INTO t1 VALUES (1), (2)").unwrap();
+        conn.execute("PRAGMA count_changes = ON").unwrap();
+
+        assert_eq!(
+            stmt.run_collect_rows().unwrap(),
+            vec![vec![Value::from_i64(2)]]
+        );
+        assert_eq!(query_single_i64(&conn, "SELECT COUNT(*) FROM t1"), 2);
+    }
+
+    #[test]
+    fn test_prepared_delete_without_where_fails_after_require_where_on() {
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("main.db");
+        let conn = open_connection(&db_path);
+
+        conn.execute("CREATE TABLE t1(a INTEGER); INSERT INTO t1 VALUES (1), (2)")
+            .unwrap();
+        let mut stmt = conn.prepare("DELETE FROM t1").unwrap();
+        conn.execute("PRAGMA require_where = ON").unwrap();
+
+        let err = stmt.run_ignore_rows().unwrap_err().to_string();
+        assert!(
+            err.contains("DELETE without a WHERE clause is not allowed"),
+            "got: {err}"
+        );
+        assert_eq!(query_single_i64(&conn, "SELECT COUNT(*) FROM t1"), 2);
     }
 
     #[test]
